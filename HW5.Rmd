@@ -1,0 +1,354 @@
+---
+title: "Homework 5"
+author: "Sarah Adilijiang"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+### Problem 1
+#### (a) Nonconstant Variance
+```{r}
+library(faraway)
+data(pipeline)
+model = lm(Lab~Field, pipeline)
+summary(model)
+
+# check for nonconstant variance using plots
+plot(model$fitted.values, model$residuals, abline(h=0))
+
+# use a formal test: Breusch-Pagan test to check the heteroscedasticity
+library(lmtest)
+bptest(model)
+```
+Answer:
+
+(1) In the residuals vs fitted values plot, the variances of errors seem to increase for larger fitted values, which indicates nonconstant variance (heteroscedasticity) in the model.
+
+(2) The Breusch-Pagan test's Null Hypothesis is homoscedasticity of the regression model, the Alternative being a heteroscedastic model. Here the Breusch-Pagan test has a p-value = 6.185e-05, so we Reject Null Hypothesis (homoscedasticity). Therefore, there is significant evidence for heteroscedasticity in this model.
+
+
+#### (b) WLS
+```{r}
+i = order(pipeline$Field)
+npipe = pipeline[i,]
+ff = gl(12,9)[-108]
+meanfield = unlist(lapply(split(npipe$Field, ff), mean))
+varlab = unlist(lapply(split(npipe$Lab, ff), var))
+
+# regress log(varlab) on log(meanfield) to estimate a0 and a1
+model2 = lm(log(varlab)~log(meanfield))
+a0 = exp( summary(model2)$coefficients[1,1] ); a0
+a1 = summary(model2)$coefficients[2,1]; a1
+```
+Answer:
+
+Since \(var(Lab) = a_oField^{a_1}\) i.e. \(\sigma_i^2 \propto a_ox_i^{a_1} \propto x_i^{a_1}\), so we can set the weights \(w_i \propto \frac{1}{\sigma_i^2} \propto \frac{1}{x_i^{a_1}}\).
+
+```{r}
+WLSmodel = lm(Lab~Field, pipeline, weights = 1/(Field^a1))
+summary(WLSmodel)
+
+# check for nonconstant variance using plots
+plot(WLSmodel$fitted.values, sqrt(1/(pipeline$Field^a1))* WLSmodel$residuals, abline(h=0))
+```
+Answer:
+
+Here we see the Adjusted R-squared value of the WLS model is higher than that of the previous Least Squares model. And in the residuals vs fitted values plot, the adjusted errors (\(\sqrt{w_i}\hat{\varepsilon_i}\)) look much better (more like having a constant variance) than the previous LS model.
+
+
+#### (c) Transformations
+```{r}
+cor(pipeline$Lab, pipeline$Field)
+```
+
+Since the response "Lab" and the predictor "Field" are highly positively correlated, there is no need to try inverse transformations.
+
+1) Therefore, first, we try to take the square root of the predictor "Field" and look for the appropriate transformation of the predictor "Field" in this case.
+```{r}
+# fit Lab on sqrt(Field)
+model = lm(Lab~sqrt(Field), pipeline)
+summary(model)
+
+# use Box-Cox method to find the appropriate lambda for the response
+library(MASS)
+boxcox(model, plotit = TRUE, lambda = seq(-0.5,1.0,by=0.1))
+```
+Answer:
+
+According to the Box-Cox method, the \(\lambda\) should be around 0.25. If we only consider log or square root transformations, then \(\lambda\) can be either 0 or 0.5 in this case, which indicates that we should either take the log or square root of response "Lab". 
+
+So now we try both of these two models.
+```{r}
+# fit sqrt(Lab) on sqrt(Field)
+model = lm(sqrt(Lab)~sqrt(Field), pipeline)
+summary(model)
+
+# check for nonconstant variance using plots
+plot(model$fitted.values, model$residuals, abline(h=0))
+
+# use a formal test: Breusch-Pagan test to check the heteroscedasticity
+library(lmtest)
+bptest(model)
+```
+
+
+```{r}
+# fit log(Lab) on sqrt(Field)
+model = lm(log(Lab)~sqrt(Field), pipeline)
+summary(model)
+
+# check for nonconstant variance using plots
+plot(model$fitted.values, model$residuals, abline(h=0))
+
+# use a formal test: Breusch-Pagan test to check the heteroscedasticity
+library(lmtest)
+bptest(model)
+```
+
+
+2) Second, we try to take the log of the predictor "Field" and look for the appropriate transformation of the predictor "Field" in this case.
+```{r}
+# fit Lab on log(Field)
+model = lm(Lab~log(Field), pipeline)
+summary(model)
+
+# use Box-Cox method to find the appropriate lambda for the response
+library(MASS)
+boxcox(model, plotit = TRUE, lambda = seq(-1.0,1.0,by=0.1))
+```
+Answer:
+
+According to the Box-Cox method, the \(\lambda\) should be around -0.9. If we only consider log or square root transformations, then \(\lambda\) should be 0 in this case, which indicates that we should either take the log of response "Lab". 
+
+So now we try this model.
+```{r}
+# fit log(Lab) on log(Field)
+model = lm(log(Lab)~log(Field), pipeline)
+summary(model)
+
+# check for nonconstant variance using plots
+plot(model$fitted.values, model$residuals, abline(h=0))
+
+# use a formal test: Breusch-Pagan test to check the heteroscedasticity
+library(lmtest)
+bptest(model)
+```
+Answer:
+
+Compare the above three models:
+
+(1) The first model (regressing \(\sqrt{Lab}\) on \(\sqrt{Field}\)) has a Breusch-Pagan test p-value of 0.003952, so we Reject Null Hypothesis (homoscedasticity). Therefore, there is still a significant evidence for heteroscedasticity in this model.
+
+(2) The second and third models both have Breusch-Pagan test p-value that are larger than 0.1, so there are no significant evidences for heteroscedasticity in both of these two models. However, the third model (regressing \(\log(Lab)\) on \(\log(Field)\)) has higher Multiple R-squared value and higher Adjusted R-squared value than the second model (regressing \(\log(Lab)\) on \(\sqrt{Field}\)). Also, in the residuals vs fitted values plot, the third model has better distribution of residuals which looks more like having a constant variance.
+
+Therefore, in conclusion, we should regress \(\log(Lab)\) on \(\log(Field)\) to get an approximately linear relationship with constant variance.
+
+
+
+### Problem 2
+#### (a) Least Squares
+```{r}
+library(faraway)
+data(stackloss)
+model_ls = lm(stack.loss~., stackloss)
+summary(model_ls)
+```
+
+
+#### (b) Least Absolute Deviations (LAD)
+```{r}
+library(quantreg)
+model_lad = rq(stack.loss~Air.Flow+Water.Temp+Acid.Conc., data = stackloss)
+summary(model_lad)
+```
+
+
+#### (c) Huber method
+```{r}
+library(MASS)
+model_huber = rlm(stack.loss~Air.Flow+Water.Temp+Acid.Conc., data = stackloss)
+summary(model_huber)
+```
+
+
+#### (d) Least Trimmed Squares (LTS)
+```{r}
+library(MASS)
+model_lts = ltsreg(stack.loss~Air.Flow+Water.Temp+Acid.Conc., data = stackloss)
+summary(model_lts)
+coef(model_lts)
+```
+Answer:
+
+Compare the four models:
+
+When using LAD/Huber/LTS models, the numerical values of the coefficient for predictor "Air.Flow" change a relatively small amount comparing with the LS model. However, the numerical values of predictors "Water.Temp" and "Acid.Conc." change a relatively larger amount comparing with the LS model.
+
+The LS works well when there are normal errors, but perform relatively poorly when having outliers and highly influential points. However, the robust regression methods (LAD/Huber/LTS) are less sensitive thus more robust to outliers.
+
+
+#### (e) Outliers and Influential points
+#### Outliers
+```{r}
+# find potential outliers
+jack <- rstudent(model_ls)
+jack[which.max(abs(jack))]
+
+# Here we use 5% significance level to perform the t-test
+alpha = 0.05
+n = nrow(stackloss)
+p = length(model_ls$coefficients)
+
+# t-test without Bonferroni correction
+t = qt(1-alpha/2, df = n-p-1)
+jack[abs(jack) > t]
+
+# t-test with Bonferroni correction
+t = qt(1-(alpha/2)/n, df = n-p-1)
+jack[abs(jack) > t]
+
+# outlier test
+library(car)
+outlierTest(model_ls)
+```
+
+
+#### Influential points
+```{r}
+# find influential points with large Cook's Distance
+cook = cooks.distance(model_ls)
+n = nrow(stackloss)
+cook[cook > 4/n]
+
+# find influential points with large Cook's Distance via half-normal plot
+halfnorm(cook, ylab = "Cook's Distances", nlab = 1)
+```
+Answer:
+
+The 21th observation (row) seem to be an outlier to the least squares regression model under the looser measure without Bonferroni correction.
+
+And the 21th observation (row) also have a large Cook's Distance thus have a large influence on the fitted least squares model.
+
+Therefore, we remove the 21th observation (row) to re-fit the least squares regression.
+```{r}
+stackloss_new = stackloss[-21,]
+model_ls_new = lm(stack.loss~., stackloss_new)
+summary(model_ls_new)
+```
+Answer:
+
+Compare the new LS model with previous four models:
+
+In the new LS model, the the numerical values of the coefficient for predictor "Air.Flow" still change a relatively small amount comparing with previous four models. However, the numerical values of predictors "Water.Temp" and "Acid.Conc." change a relatively larger amount comparing with the previous LS model which includes the ourlier, and now their values fall in the range of these two coefficient values in LAD/Huber/LTS models.
+
+Therefore, the LS works well when there are normal errors, but perform relatively poorly when having outliers and highly influential points. And performing LS model after removing the outliers has similar effect of robust regression methods (LAD/Huber/LTS) which are less sensitive thus more robust to outliers.
+
+
+
+### Problem 3
+#### (a) Forward stepwise - BIC
+```{r}
+set.seed(1)
+p = c(200,400,600,800)
+
+for (i in 1:length(p)){
+    # generate simulated data set
+    n = 400
+    X = matrix(rnorm(n*p[i], mean=0, sd=1), nrow=n, ncol=p[i])
+    X = X %*% diag( 1/sqrt(colSums(X^2)) )  #or X = scale(X, center=FALSE, scale=sqrt(colSums(X^2)))
+    Beta = c(rep(5,10),rep(0,p[i]-10))
+    noise = rnorm(n, mean=0, sd=1)
+    Y = X %*% Beta + noise
+    
+    # run forward stepwise without threshold of p-values
+    S = NULL
+    store_RSS = rep(0,31)
+    store_RSS[1] = sum( (Y-lm(Y~1)$fitted.values)^2 )
+    pvalues = NULL
+
+    for (k in 1:30){
+        S_else = setdiff(1:p[i],S)
+        
+        for (j in 1:length(S_else)){
+            model = lm( Y ~ X[,c(S,S_else[j])] )
+            pvalues[j] = summary(model)$coefficients[nrow(summary(model)$coefficients),4]
+        }
+        add_ind = S_else[which.min(pvalues)]
+        S = c(S,add_ind)
+        XS = X[,S,drop=FALSE]
+        store_RSS[k+1] = sum( (Y-lm(Y~XS)$fitted.values)^2 ) 
+    } 
+    
+    BIC = n*log(store_RSS) + (0:30)*log(n)
+    plot(0:30,BIC,xlab=paste0('model size (forward stepwise), p = ',p[i]),ylab='BIC')
+}
+
+```
+Answer:
+
+When p=200 < n=400, BIC has the lowest value around model size 14, which is closer to the true model size 10 though still having some false positive results. When p=400 = n=400,  BIC has the lowest value around model size 19, which is more larger than true model size 10 and having more false positive results than before. Therefore, when p is smaller, BIC does a relatively good job of picking an appropriate model size, but gets more false positive results as p increases since BIC don't correct for multiple testing issue.
+
+When p=600 or 800 > n=400, BIC keeps decreasing and has the lowest value at the model size 30 and can get even lower if keeps increasing the model size. In this case, BIC does not do a good job of picking an appropriate model size any more, since BIC don't correct for multiple tesing issue and having a large number of covariates will generate lots of false positive results for BIC.
+
+
+#### (b) Forward stepwise - prediction error in the validation set
+```{r}
+set.seed(1)
+p = c(200,400,600,800)
+
+for (i in 1:length(p)){
+    # generate simulated data set
+    n = 400
+    X = matrix(rnorm(n*p[i], mean=0, sd=1), nrow=n, ncol=p[i])
+    X = X %*% diag( 1/sqrt(colSums(X^2)) )  #or X = scale(X, center=FALSE, scale=sqrt(colSums(X^2)))
+    Beta = c(rep(5,10),rep(0,p[i]-10))
+    noise = rnorm(n, mean=0, sd=1)
+    Y = X %*% Beta + noise
+    
+    # randomly separate the data into two subsets: training & validation sets
+    idx = sample(1:n, size=200, replace=FALSE)
+    X_train = X[idx, ]
+    Y_train = Y[idx, ]
+    X_val = X[-idx, ]
+    Y_val = Y[-idx, ]
+    
+    # run forward stepwise without threshold of p-values
+    S = NULL
+    store_pred_err = rep(0,31)
+    Beta0_hat = summary(lm(Y_train~1))$coefficients[1,1]
+    store_pred_err[1] = sum( (Y_val-Beta0_hat)^2 )
+    pvalues = NULL
+
+    for (k in 1:30){
+        S_else = setdiff(1:p[i],S)
+        
+        for (j in 1:length(S_else)){
+            model = lm( Y_train ~ X_train[,c(S,S_else[j])] )
+            pvalues[j] = summary(model)$coefficients[nrow(summary(model)$coefficients),4]
+        }
+        add_ind = S_else[which.min(pvalues)]
+        S = c(S,add_ind)
+        XS_train = X_train[,S,drop=FALSE]
+        
+        Beta0_hat = summary(lm(Y_train~XS_train))$coefficients[1,1]
+        Beta_hat = summary(lm(Y_train~XS_train))$coefficients[-1,1]
+        XS_val = X_val[,S,drop=FALSE]
+        Y_pred = Beta0_hat + XS_val %*% Beta_hat
+        
+        store_pred_err[k+1] = sum( (Y_val-Y_pred)^2 )
+    } 
+    
+    plot(0:30,store_pred_err,xlab=paste0('model size (forward stepwise), p = ',p[i]),ylab='prediction error')
+}
+```
+Answer:
+
+When p=200 < n=400, prediction error has the lowest value around model size 9. When p=400 = n=400,  prediction error has the lowest value around model size 6. When p=600 or 800 > n=400, prediction error also can get the lowest value around model size 9 and 6. They are all close to the true model size 10 though still having some false negative results. 
+
+Therefore, in general, using validation method will solve the multiple tesing issue of BIC and is a much better method for large number of covariates to pick an appropriate model.
+
+
+
+### Problem 4
+see next page

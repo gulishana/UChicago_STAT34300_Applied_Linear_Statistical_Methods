@@ -1,0 +1,135 @@
+---
+title: "Homework 4"
+author: "Sarah Adilijiang"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+### Problem 1
+```{r}
+library(faraway)
+data(longley)
+model = lm(Employed~., longley)
+summary(model)
+```
+
+
+#### (a) condition numbers
+```{r}
+X = model.matrix(model)[,-1]
+e = eigen(t(X)%*%X)
+e$values
+sqrt(e$values[1]/e$values)
+```
+Answer:
+
+There is a very large range in the eigenvalues. And there are three large condition numbers, which are greater than 30. This means that the highly collinearity problems are being caused by more than just one linear combination within the predictor matrix \(X^TX\).
+
+
+#### (b) correlations between predictors
+```{r}
+round(cor(longley),3)
+```
+Answer:
+
+There are several very large pairwise correlations (close to one) both between four predictors (GNP.deflator, GNP, Population, and Year) and between these predictors and the response, which reveals highly pairwise collinearities. The predictor Unemployed is less but still relatively highly correlated with these four predictors.
+
+This result suggests us that we should only keep one of the four strongly correlated variables - GNP.deflator, GNP, Population, and Year - in the model to avoid the multicollinearity problem.
+
+
+#### (c) variance inflation factors
+```{r}
+vif(model)
+```
+Answer:
+
+There is much variance inflation. In practice it is common to say that VIF greater than 5 is problematic. So in this dataset there is a huge collinearity issue. Each of the predictors - GNP.deflator, GNP, Population and Year - are highly explained by the other predictors. The predictor Unemployed is less but still well explained by the other predictors as well.
+
+
+
+### Problem 2
+```{r}
+library(faraway)
+data(prostate)
+model = lm(lpsa~., prostate)
+summary(model)
+```
+
+
+#### (a) condition numbers
+```{r}
+X = model.matrix(model)[,-1]
+e = eigen(t(X)%*%X)
+e$values
+sqrt(e$values[1]/e$values)
+```
+Answer:
+
+There is a large range in the eigenvalues. And there are six large condition numbers, which are greater than 30. This means that the highly collinearity problems are being caused by more than just one linear combination within the predictor matrix \(X^TX\).
+
+
+#### (b) correlations between predictors
+```{r}
+round(cor(prostate),3)
+```
+Answer:
+
+There are several reletively large pairwise correlations between predictors (lcavol, lcp), (svi, lcp), (lcp, pgg45), and (gleason, pgg45), which reveals their pairwise collinearities. The response lpsa is also highly correlated with the predictor lcavol.
+
+It's not clear if we should remove some of the highly correlated variables, but it's worthy trying to remov the predictor lcp, or pgg45, or both of them, then compare the reduced model with the full model to see if the reduced model fits better.
+
+
+#### (c) variance inflation factors
+```{r}
+vif(model)
+```
+Answer:
+
+However, there is no significant variance inflation prolem. All the VIF's are smaller than 5.
+
+
+
+### Problem 3
+```{r}
+# original data and model
+library(faraway)
+data(longley)
+model = lm(Employed~., data = longley)
+summary(model)$coefficients[2,]
+
+# bootstrap data 1000 times
+beta_GNPdeflator_hat = NULL
+SE_beta_GNPdeflator_hat = NULL
+
+for (i in 1:1000){
+    indices = sample(1:16, 16, replace = TRUE)
+    boot_data = longley[indices, ]
+    boot_model = lm(Employed~., data = boot_data)
+    beta_GNPdeflator_hat[i] = summary(boot_model)$coefficients[2,1]
+    SE_beta_GNPdeflator_hat[i] = summary(boot_model)$coefficients[2,2]
+}
+
+# compute the empirical mean of beta_GNPdeflator_hat
+mean(beta_GNPdeflator_hat)
+
+# compute the empirical standard deviation of beta_GNPdeflator_hat
+sd(beta_GNPdeflator_hat)
+    
+# compute the median of bootstrap estimates SE_beta_GNPdeflator_hat
+median(SE_beta_GNPdeflator_hat)
+```
+Answer:
+
+The empirical mean of \(\hat{\beta}_{GNP.deflator}\) from bootstrap samples does not match the original model estimate of \(\hat{\beta}_{GNP.deflator}\), which is 0.01506187. So the estimate of 
+\(\hat{\beta}_{GNP.deflator}\) is biased here.
+
+The median value of SE(\(\hat{\beta}_{GNP.deflator}\)) from bootstrap samples also does not match the empirical standard deviation of \(\hat{\beta}_{GNP.deflator}\). So the usual estimate of the SE for \(\hat{\beta_{GNP.deflator}}\) does not estimate the variability appropriately here.
+
+These serious problems with the estimation of \(\beta\) and associated quantities are caused by highly collinearity problems of the data set. Collinearity will lead to imprecise estimates of \(\beta\), so the the estimate of 
+\(\hat{\beta}_{GNP.deflator}\) is biased. And we have \(var\hat{\beta}_j = \sigma^2 \frac{1}{1-R^2_j} \frac{1}{S_{x_jx_j}}\), since the variable GNP.deflator is highly correlated with other variables thus being highly explained by other variables, the \(R^2_{GNP.deflator}\) is large so the \(var\hat{\beta}_{GNP.deflator}\) is inflated.
+
+
+
+### Problem 4
+see next page

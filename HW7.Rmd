@@ -1,0 +1,182 @@
+---
+title: "Homework 7"
+author: "Sarah Adilijiang"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+### Problem 1
+```{r}
+library(faraway)
+data(teengamb)
+str(teengamb)
+
+# change the quantitative variable "sex" into a factor variable
+teengamb$sex = as.factor(teengamb$sex)
+str(teengamb)
+```
+
+```{r}
+# remove the two-way interaction terms between "sex" and other varialbes with different sequences
+model1 = lm(gamble~sex+status+income+verbal+sex:status+sex:income+sex:verbal, teengamb)
+model2 = lm(gamble~sex+status+income+verbal+sex:status+sex:verbal+sex:income, teengamb)
+model3 = lm(gamble~sex+status+income+verbal+sex:income+sex:status+sex:verbal, teengamb)
+model4 = lm(gamble~sex+status+income+verbal+sex:income+sex:verbal+sex:status, teengamb)
+model5 = lm(gamble~sex+status+income+verbal+sex:verbal+sex:income+sex:status, teengamb)
+model6 = lm(gamble~sex+status+income+verbal+sex:verbal+sex:status+sex:income, teengamb)
+anova(model1)
+anova(model2)
+anova(model3)
+anova(model4)
+anova(model5)
+anova(model6)
+```
+Answer:
+
+Here all the ANOVA tests show that "sex:income" is a significant interaction term and should be added into the model. And "sex:status" is sometimes significant and sometimes not. So we can compare between the model adding only "sex:income" and the model adding both of them. The result is shown in the results of anova(model3), where the "sex:income" is added first and the "sex:status" is added next. The p-value of F-test is 0.3499569, so we do not reject the reduced model and pick the final model: $$gamble = \beta_0 + \beta_{sex1}sex1 + \beta_{status}status + \beta_{income}income + \beta_{verbal}verbal + \beta_{sex1:income}sex1:income + noise$$
+
+
+```{r}
+model = lm(gamble~sex+status+income+verbal+sex:income, teengamb)
+summary(model)
+```
+Answer:
+
+Here "male" (sex=0) is the reference level, \(\beta_{sex1}\) = 4.06362, \(\beta_{income}\) = 6.19885, \(\beta_{sex1:income}\) = -6.43683.
+
+So when "status" and "verbal" are the same:
+
+(1) for male, the average change of "gamble" (expenditure on gambling in pounds per year) is 6.19885 pounds when there is an additional increase of "income" (in pounds per week);
+
+(2) for female, the average change of "gamble" (expenditure on gambling in pounds per year) is 6.19885-6.43683 = -0.23798 pounds when there is an additional increase of "income" (in pounds per week).
+
+
+
+### Problem 2
+```{r}
+library(lattice)
+data(barley)
+str(barley)
+```
+
+#### (a) 
+Answer:
+
+There are \(10 \times 2 \times 6 = 120\) possible combinations of "variety", "year", and "site" (including reference levels), thus 120 degrees of freedom would be used by the model with all interactions.
+
+Since number of observations n=120, which is equal to the degrees of freedom used by the model, thus we will not be able to do significance testing on this full model (n-p=0).
+
+
+#### (b)
+Answer:
+
+There are \(10 \times 2 \times 6 - 9 \times 1 \times 5 = 120 - 45 = 75\) degrees of freedom would be used by the model with all factors and two-way interactions, but not three-way interactions.
+
+Since number of observations n=120 > df=75, thus we now will be able to do significance testing on this reduced model.
+
+
+#### (c)
+First, we try to remove different two-way interaction terms first.
+```{r}
+barley2 = barley[-c(23,83), ]
+
+# first, try to remove different two-way interaction terms first
+model1 = lm(yield~(variety+site+year)**2, barley2)
+model2 = lm(yield~(variety+year+site)**2, barley2)
+model3 = lm(yield~(site+year+variety)**2, barley2)
+anova(model1)
+anova(model2)
+anova(model3)
+```
+Answer:
+
+Here the ANOVA tests show that only "year:variety" is not a significant interaction term at 0.05 significance level (F test p-value = 0.089547 > 0.05), thus it can be removed from the model. 
+
+Then we try to remove the other two interaction terms with different sequence.
+```{r}
+# Then, try to remove other two interaction terms with different sequence
+model1 = lm(yield~variety+site+year+site:variety+site:year, barley2)
+model2 = lm(yield~variety+site+year+site:year+site:variety, barley2)
+anova(model1)
+anova(model2)
+```
+Answer:
+
+Here the ANOVA tests show that there is no evidence that "site:year" and "site:variety" should be removed from the model at 0.05 significance level (F test p-value = 4.377e-15 and 0.008104, both < 0.05), thus we keep them in the model. Therefore, the final reduced model is: $$lm(yield \sim variety + site + year + site:variety + site:year)$$
+
+
+
+### Problem 3
+#### (a) 
+```{r}
+library(faraway)
+data(pulp)
+str(pulp)
+
+# calculate sample means of "bright" in each group of "operator"
+means = tapply(X = pulp$bright, INDEX = pulp$operator, FUN = mean)
+means
+```
+Answer:
+
+\(\hat{\alpha_A} = 60.24, \hat{\alpha_B} = 60.06, \hat{\alpha_C} = 60.62, \hat{\alpha_D} = 60.68\)
+
+
+#### (b)
+```{r}
+Levels = levels(pulp$operator)
+RSS_bygroup = NULL
+for (i in 1:length(Levels)) {
+    RSS_bygroup[i] = sum((pulp$bright[pulp$operator==Levels[i]] - means[Levels[i]])^2)
+}
+RSS = sum(RSS_bygroup)
+df = nrow(pulp) - length(Levels)
+sigma_hat = sqrt(RSS/df);    sigma_hat
+```
+Answer:
+
+\(\hat{\sigma} = 0.3259601\)
+
+
+#### (c)
+If \(\sigma\) were known, we have \(\sqrt{Var(\hat{\alpha_A} - \hat{\alpha_B})} = \sigma * \sqrt{1/5 + 1/5} = \sigma * \sqrt{2/5}\), so \(SE(\hat{\alpha_A} - \hat{\alpha_B}) = \hat{\sigma} * \sqrt{2/5}\), and its value is calculated as shown below.
+```{r}
+SE_pair = sigma_hat * sqrt(2/5); SE_pair
+```
+Answer:
+
+Therefore, same as above, we have \(SE(\hat{\alpha_A} - \hat{\alpha_B}) = SE(\hat{\alpha_A} - \hat{\alpha_C}) = SE(\hat{\alpha_A} - \hat{\alpha_D}) = SE(\hat{\alpha_B} - \hat{\alpha_C}) = SE(\hat{\alpha_B} - \hat{\alpha_D}) = SE(\hat{\alpha_C} - \hat{\alpha_D}) = \hat{\sigma} * \sqrt{2/5} = 0.2061553\) 
+
+
+#### (d)
+```{r}
+L = length(Levels)
+q = qtukey(0.95, L, nrow(pulp)-L)
+
+# 95% CIs for each pair comparison
+CIs = data.frame("diff"=rep(0,12), "lwr"=rep(0,12), "upr"=rep(0,12))
+for (i in 1:(L-1)) {
+    for (j in 1:L) {
+        CIs$diff[(i-1)*4+j] = means[Levels[j]] - means[Levels[i]]
+        CIs$lwr[(i-1)*4+j] = CIs$diff[(i-1)*4+j] - q/sqrt(2) * SE_pair
+        CIs$upr[(i-1)*4+j] = CIs$diff[(i-1)*4+j] + q/sqrt(2) * SE_pair
+        rownames(CIs)[(i-1)*4+j] =paste0(Levels[j],"-",Levels[i])
+    }
+}
+CIs[-c(1,5,6,9,10,11), ]
+
+# or using function TukeyHSD()
+model = lm(bright~operator, pulp)
+TukeyHSD(aov(model))
+```
+Answer:
+
+Therefore, the 95% Tukey HSD confidence intervals of \(\alpha_B - \alpha_A\), \(\alpha_C - \alpha_A\), \(\alpha_D - \alpha_A\), \(\alpha_C - \alpha_B\), \(\alpha_D - \alpha_C\) all cover zero, which means that there are no significant differences between these pairs of production methods at 0.05 significance level.
+
+However, the 95% Tukey HSD confidence interval of \(\alpha_D - \alpha_B\) does not cover zero and is greater than zero, which means that the brightness is significantly higher for production method D than for B at 0.05 significance level.
+
+
+
+### Problem 4
+see next page

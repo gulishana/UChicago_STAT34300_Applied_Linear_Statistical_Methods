@@ -1,0 +1,711 @@
+---
+title: "Final Data Analysis"
+author: "Sarah Adilijiang"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+### Part 1
+
+Check the current data types and then change the data types of catogorical variables "sex", "chestpain", "fbs", "resteccg", "exang", "slope", "extest" into factors.
+```{r}
+# check the current data types of each variables
+data_ori = read.table('heart.txt', header = TRUE)
+str(data_ori)
+
+# change the data type of categorical variables into factors
+data = data_ori
+data$sex = as.factor(data$sex)
+data$chestpain = as.factor(data$chestpain)
+data$fbs = as.factor(data$fbs)
+data$restecg = as.factor(data$restecg)
+data$exang = as.factor(data$exang)
+data$slope = as.factor(data$slope)
+data$extest = as.factor(data$extest)
+
+# check the data types after the changing
+str(data)
+```
+
+
+
+### Part 2
+
+Address with the missing values.
+```{r}
+# check the number of missing values
+data[is.na(data)]
+sum(is.na(data))
+nrow(data)
+sum(is.na(data))/nrow(data)
+
+# look at summary of each covariates and find the missing values
+summary(data)
+
+# locate the missing values
+which(is.na(data$fluoro))
+which(is.na(data$extest))
+```
+
+There're six missing values in this data set, which are located at different data points in the variabes "fluoro" and "extest". Variable "extest" is a factor variable, so it's not appropriate to use mean or regression to impute the missing values for it. Though variable "fluoro" is a quantitative variable, it only has four possible integer values: 0,1,2,3, and more than half of the values are 0 (median of "fluoro" is 0.0000). No matter using mean (0.6722) or regression, it will not properly give a precise integer value. 
+
+Most importantly, these six missing values only occupy 2% of the total number of data points (303). Therefore, the best way to handle these small number of missing values in the data set is to simply delete the data points that contain these missing values. 
+
+```{r}
+# delete data points with missing values
+data2 = data[-c(167,193,288,303,88,267), ]
+rownames(data2) = as.character(seq(1,297))  # indices are reordered
+
+# check if there is any missing values now
+sum(is.na(data2))
+```
+
+
+
+### Part 3
+
+Check constant variance and normality of errors.
+
+For now, we fit a linear model with no interaction terms and include all the variables to see whether a linear model is appropriate for this data set or not. First, we check if the errors have constant variance, and then we check if the errors basically follow a normal distribution.
+
+(1) Constant variance:
+```{r}
+# plot residuals against fitted y
+model2 = lm(maxhr~., data2)
+plot(model2$fitted.values, model2$residuals)
+abline(h=0)
+
+# use a formal test: Breusch-Pagan test to check the heteroscedasticity
+library(lmtest)
+bptest(model2)
+```
+
+There is no significant pattern of heteroscedasticity or nonlinearity in the residuals vs fitted values plot.
+
+And the Breusch-Pagan test also indicates that there is no significant evidence for heteroscedasticity in this model. Breusch-Pagan test's Null Hypothesis is homoscedasticity of the regression model, the Alternative being a heteroscedastic model. Here the p-value = 0.3578 > 0.1, so we Do Not Reject Null Hypothesis (homoscedasticity) at \(\alpha\) = 10% significance level or smaller. Therefore, there is no significant evidence for heteroscedasticity.
+
+(2) Normality of errors:
+```{r}
+# look at the histogram of the residuals
+hist(model2$residuals, breaks = 20)
+
+# Shapiro-Wilk test
+shapiro.test(model2$residuals)
+
+# Q-Q plot
+qqnorm(model2$residuals, ylab = "Residuals")
+qqline(model2$residuals)
+```
+
+The main part of the histogram of residuals seems to follow a symmetric, bell-shape. But it is a little right skewed and the left tail is a little longer than the right tail. So though the main portion of residuals look normal, the whole distribution seems not to be quite normal.
+
+The Shapiro-Wilk test's Null Hypothesis is that data follows a normal distribution. Here the Shapiro-Wilk test has a p-value = 0.000114 < 0.001, so we Reject Null Hypothesis at \(\alpha\) = 0.1% significance level. Therefore, the Shapiro-Wilk test also indicates that the residuals do not follow a normal distribution.
+
+However, the most part of Q-Q plot approximately follows the line. Though the left tail and right tail do not follow the line, it looks like a short-tailed nonnormality error problem. When nonnormality is found, the resolution depends on the type of problem found. For short-tailed distributions, the consequences of nonnormality are not serious and can reasonably be ignored.
+
+Conclusion:
+
+According to the two examinations above, we can say that a linear model is basically appropriate for this data set. The linear model does not have significant heteroscedasticity or nonlinearity problem, and the short-tailed nonnormality problem is not serious and can reasonably be ignored.
+
+
+
+### Part 4
+
+Check individual points.
+
+(1) Large leverage points.
+```{r}
+# find large leverage points
+diag_H = hatvalues(model2)    # i.e. leverages
+sum(diag_H > 2 * mean(diag_H))
+diag_H[diag_H > 2 * mean(diag_H)]
+
+
+# find large leverage points via half-normal plot
+library(faraway)
+leverages = influence(model2)$hat
+halfnorm(leverages, nlab = 4, ylab = "Leverages")
+```
+
+There are nie observations that have hat values which are more than twice the mean of leverage values. From the half-norm plot, we can see that among the nine large leverage points there are four ones that have hat values much higher than the others, they are the 279th, 255th, 229th and 282th observations. (Note that here the indices of observations are reordered from 1 to 297 after removing the missing values.)
+
+(2) Outliers.
+```{r}
+# find potential outliers
+jack <- rstudent(model2)
+jack[which.max(abs(jack))]
+
+# Here we use 5% significance level to perform the t-test
+alpha = 0.05
+n = nrow(data2)
+p = length(model2$coefficients)
+
+# t-test without Bonferroni correction
+t = qt(1-alpha/2, df = n-p-1)
+jack[abs(jack) > t]
+sum(abs(jack) > t)
+
+# t-test with Bonferroni correction
+t = qt(1-(alpha/2)/n, df = n-p-1)
+jack[abs(jack) > t]
+sum(abs(jack) > t)
+
+# outlier test
+library(car)
+outlierTest(model2)
+```
+
+Seventeen observations seem to be outliers to the regression model under the looser measurement without Bonferroni correction.
+
+However, when using the Bonferroni correction, there are no outliers any more. 
+
+(3) Influential points.
+```{r}
+# find influential points with large Cook's Distance
+cook = cooks.distance(model2)
+n = nrow(data2)
+cook[cook > 4/n]
+sum(cook > 4/n)
+
+# find influential points with large Cook's Distance via half-normal plot
+halfnorm(cook, nlab = 4, ylab = "Cook's Distances")
+```
+
+Generally, a Cook's Distance \(D_{i}\) is considered large if \(D_{i} > 4/n\). Here there are twenty observations that have large Cook's Distances thus have large influence on the fitted model. The half-norm plot shows that the highest influential points are the 243th, 242th, 292th, and 112th observations.
+
+Conclusion:
+
+None of the detected large leverage points are outliers even under the looser measurement without Bonferroni correction. So there's no need to remove these points. And the largest influential points (243th, 242th, 292th, and 112th observations) are all just detected outliers without Bonferroni correction, thus there's no significant necessity to remove these points either.
+
+As a result, there's no significant reason to remove any individual points in this linear model.
+
+
+
+### Part 5
+
+Check the correlations between covariates.
+```{r}
+# have a look at pairwise scatterplots
+pairs(data2)
+
+# check the gvif values of each variables
+library(car)
+car::vif(model2)
+```
+
+Since the correlation matrix cannot be used for categorical variables, here I used pairwise scatterplots to have a look at potential collinearity problems. Except that some variablies are skewed to one side, there seems not be significant high correlations between covariates.
+
+To formally check if there is any collinearity problem, I checked the variance inflation factors (VIF). It is suggested that the straightforward VIF can't be used if there are variables with more than one degree of freedom (e.g. categorical variables with more than two levels) and instead we should use the GVIF (generalized variance inflation factor) function in the car package. For continous variables, the GVIF values are the same as VIF values, however, for categorical variables, GVIF values are the VIFs corrected by the number of degrees of freedom (df) of the categorical variables.
+
+Here we see that none of GVIF values is greater than 5, thus there is no significant variance inflation prolems as well as collinearity problems in this data set. 
+
+
+
+### Part 6
+
+Check if there is any need of transformations.
+```{r}
+# plot the histograms of quantitative variables
+par(mfrow = c(2,3))
+hist(data2$age, main="Histogram of age", xlab="age", breaks=20)
+hist(data2$restbp, main="Histogram of restbp", xlab="restbp", breaks=20)
+hist(data2$chol, main="Histogram of chol", xlab="chol", breaks=20)
+hist(data2$oldpeak, main="Histogram of oldpeak", xlab="oldpeak", breaks=20)
+hist(data2$fluoro, main="Histogram of fluoro", xlab="fluoro", breaks=20)
+
+# plot residuals against quantitative variables
+par(mfrow = c(2,3))
+plot(data2$age, model2$residuals, abline(h=0))
+plot(data2$restbp, model2$residuals, abline(h=0))
+plot(data2$chol, model2$residuals, abline(h=0))
+plot(data2$oldpeak, model2$residuals, abline(h=0))
+plot(data2$fluoro, model2$residuals, abline(h=0))
+plot(model2$fitted.values, model2$residuals, abline(h=0))
+```
+
+In the histograms of quantitative variables, we can see that the distribution of "restbp", "chol", "oldpeak" and "fluoro" is skewed to the left. And in the residuals vs quantitative variables plot, the distribution of residuals are also skewed to the left for variables "restbp", "chol" and "oldpeak", especially for "chol". For variable "fluro", though most of the values are at located at zero, the corresponding residuals at each value seems to be normally distributed with similar variance.
+
+Therefore, here I considered some transformations of quantitative variables "restbp", "chol" and "oldpeak". Since "restbp" and "chol" are positive values, I will perform log transformations of these two variables. Since "oldpeak" is nonnegative and includes quite a lot of zero values, I will perform a square root transformation of this variable.
+
+```{r}
+# variable transformations
+data3 = data2
+data3$restbp = log(data3$restbp)
+data3$chol = log(data3$chol)
+data3$oldpeak = sqrt(data3$oldpeak)
+
+# fit the new model with transformed variables
+model3 = lm(maxhr~., data3)
+
+# plot the histograms of quantitative variables
+par(mfrow = c(2,3))
+hist(data3$age, main="Histogram of age", xlab="age", breaks=20)
+hist(data3$restbp, main="Histogram of log(restbp)", xlab="log(restbp)", breaks=20)
+hist(data3$chol, main="Histogram of log(chol)", xlab="log(chol)", breaks=20)
+hist(data3$oldpeak, main="Histogram of sqrt(oldpeak)", xlab="sqrt(oldpeak)", breaks=20)
+hist(data3$fluoro, main="Histogram of fluoro", xlab="fluoro", breaks=20)
+
+# plot residuals against quantitative variables
+par(mfrow = c(2,3))
+plot(data3$age, model3$residuals, abline(h=0), xlab="age")
+plot(data3$restbp, model3$residuals, abline(h=0), xlab="log(restbp)")
+plot(data3$chol, model3$residuals, abline(h=0), xlab="log(chol)")
+plot(data3$oldpeak, model3$residuals, abline(h=0), xlab="sqrt(oldpeak)")
+plot(data3$fluoro, model3$residuals, abline(h=0), xlab="fluoro")
+plot(model3$fitted.values, model3$residuals, abline(h=0), xlab="fitted.values")
+```
+
+After the transformations, the distribution of "log(restbp)" and "log(chol)" are centered to the middle. Though most of "sqrt(oldpeak)" values are still located at zero, the positive values are centered to the middle as well. And in the residuals vs quantitative variables plot, the distribution of residuals of "log(restbp)", "log(chol)", and positive values of "sqrt(oldpeak)" are more spreaded and looks normally distributed. On the other hand, the distribution of residuals against the fitted values have no significant changes.
+
+From now on, we will use the transformed data set. And when using the terms "restbp", "chol" and "oldpeak", we are talking about their transformed variables.
+
+
+
+### Part 7
+
+Model selections using AIC & BIC.
+
+(1) Backward elimination using BIC.
+```{r}
+# backward elimination using BIC
+n = nrow(data3)
+fit_backward_bic = step(model3, direction="backward", k=log(n))
+fit_backward_bic
+```
+
+
+(2) Forward selection using BIC.
+```{r}
+# forward selection using BIC
+n = nrow(data3)
+fit_start = lm(maxhr~1, data3)
+fit_forward_bic = step(fit_start, 
+                       maxhr~age+sex+chestpain+restbp+chol+fbs+restecg+exang+
+                           oldpeak+slope+fluoro+extest, 
+                       direction="forward", k=log(n))
+fit_forward_bic
+```
+
+(3) Backward elimination using AIC.
+```{r}
+# backward elimination using AIC
+fit_backward_aic = step(model3, direction="backward")
+fit_backward_aic
+```
+
+(4) Forward selection using AIC.
+```{r}
+# forward selection using AIC
+fit_start = lm(maxhr~1, data3)
+fit_forward_aic = step(fit_start, 
+                       maxhr~age+sex+chestpain+restbp+chol+fbs+restecg+exang+
+                           oldpeak+slope+fluoro+extest, 
+                       direction="forward")
+fit_forward_aic
+```
+
+Discussions:
+
+AIC and BIC are both penalized-likelihood criteria. The AIC or BIC for a model is usually written in the form \(-2log(L) + k\times p\), where L is the likelihood function, p is the number of parameters in the model, and k is 2 for AIC and log(n) for BIC. So the step() function in R use k=2 as default to compute AIC values, and it computes BIC values when we set k = log(n), where n is the number of data points.
+
+Thus, BIC penalizes model complexity more heavily, so BIC has a larger chance than AIC, for any given n, of choosing too small a model. On the other hand, AIC always has a chance of choosing too big a model, regardless of n. 
+
+Though these methods may have multiple testing issues for large number of covariates, here the number of covariates is 12, which is much less than the number of data points 297. So we are not concerning about multiple tesing issues here.
+
+Here, both the BIC forward selection and backward elimination methods get the same final model. 
+In the backward elimination, it removes variables in the order of "restecg" \(\rightarrow\) "extest" \(\rightarrow\) "chestpain" \(\rightarrow\) "sex" \(\rightarrow\) "fbs" \(\rightarrow\) "fluoro" \(\rightarrow\) "chol" \(\rightarrow\) "restbp" \(\rightarrow\) "oldpeak".
+In the forward selection, it adds variables in the order of "slope" \(\rightarrow\) "age" \(\rightarrow\) "exang". 
+Thus, we can write the final model selected by BIC in the following order: \(maxhr \sim slope + age + exang\)
+
+Similarly, both the AIC forward selection and backward elimination methods get the same final model. 
+In the backward elimination, it removes variables in the order of "restecg" \(\rightarrow\) "extest" \(\rightarrow\) "fbs" \(\rightarrow\) "sex" \(\rightarrow\) "fluoro".
+In the forward selection, it adds variables in the order of "slope" \(\rightarrow\) "age" \(\rightarrow\) "exang" \(\rightarrow\) "chestpain" \(\rightarrow\) "chol" \(\rightarrow\) "oldpeak" \(\rightarrow\) "restbp". 
+Thus, we can write the final model selected by AIC in the following order: \(maxhr \sim slope + age + exang + chestpain + chol + oldpeak + restbp\)
+
+Now we compare the two models:
+```{r}
+reduced = lm(maxhr ~ slope+age+exang, data3)
+larger = lm(maxhr ~ slope+age+exang+chestpain+chol+oldpeak+restbp, data3)
+anova(reduced, larger)
+```
+
+The p-value of F test is 0.0007355 < 0.001, so we Reject Null Hypothesis at \(\alpha\) = 0.1% significance level. Thus, so far, we prefer the larger model selected by AIC here: $$maxhr \sim slope + age + exang + chestpain + chol + oldpeak + restbp$$
+
+
+
+### Part 8  (this part's code has been accidently removed from here - see Multiple Testing GroupProject 2)
+
+Variable selections using Lasso regularization.
+
+
+Here we first standardized the quantitative covariates, so that now each quantitative covariate have zero mean and \(\sum_i X_{ij}^2 = n\).
+
+
+The lasso regularization can reach sparsity, thus it can force the coefficients of covariates to zero values by increasing the \(\lambda\) value. Though it has shrinkage bias of coefficients, we can still use it as an effective tool to select covariates. Here the lasso regularization has already removed all the covariates before \(\lambda\) = 10.
+
+Next, we need to choose the best \(\lambda\) value by leave-one-out cross validations.
+
+
+According to the plots, as \(\lambda\) increases from 0 to 2.8, the average of squared leave-one-out prediction error first increases a little and then decreases to a minimal value. Then, as \(\lambda\) increases from 2.8 to 10, the average of squared leave-one-out prediction error substantially increases again and reaches a plateau near 10. Therefore, lasso regularization dose offer substantial improvement of the prediction error by removing covariates. And here it reduces the prediction error to the most extent at \(\lambda\) = 2.8. 
+
+Next, we use this best \(\lambda\) value (2.8) to fit the lasso regression model and get the coefficients of each covariates.
+
+
+
+So the variables selected by lasso regularization are "age", "oldpeak", "chestpain", "exang", and "slope". Thus, we can write the selected model as: $$maxhr \sim slope + age + exang + chestpain + oldpeak$$
+
+
+
+
+
+
+
+
+
+
+### Part 9
+
+Compare the two selected models from AIC and Lasso regularization:
+
+AIC:  \(maxhr \sim slope + age + exang + chestpain + chol + oldpeak + restbp\)
+
+Lasso: \(maxhr \sim slope + age + exang + chestpain + oldpeak\)
+
+```{r}
+reduced = lm(maxhr ~ slope+age+exang+chestpain+oldpeak, data3)
+larger  = lm(maxhr ~ slope+age+exang+chestpain+oldpeak +chol+restbp, data3)
+anova(reduced, larger)
+
+anova(lm(maxhr ~ slope+age+exang+chestpain+oldpeak +chol+restbp, data3))
+anova(lm(maxhr ~ slope+age+exang+chestpain+oldpeak +restbp+chol, data3))
+```
+
+The p-value of F test is 0.03329 < 0.05, so we Reject Null Hypothesis at \(\alpha\) = 5% significance level. Thus, we prefer the larger model here selected by AIC: \(maxhr \sim slope + age + exang + chestpain + chol + oldpeak + restbp\)
+
+Then when we use anova() function to see if we can remove any one of "chol" and "restbp" with different orders, we find that we can remove "restbp" while keeping "chol" in the model, however, we cannot remove "chol" while keeping "restbp" in the model.
+
+Therefore, so far, we will prefer the model between the sizes of two selected models: $$maxhr \sim slope + age + exang + chestpain + chol + oldpeak$$
+
+Then next, we can consider the interaction terms and see if we can still remove the following covariates from the model in the order of: 
+$$ restecg \rightarrow extest \rightarrow fbs \rightarrow sex \rightarrow fluoro \rightarrow restbp$$
+
+Note that since lasso may have shrinkage bias of coefficients, the above order is the one indicated by AIC, not by lasso. 
+
+Let's have a look at the summary of the current smaller selected model.
+```{r}
+# reoder the sequence and have a look at the current smaller selected model
+model3 = lm(maxhr ~ slope+age+exang+chestpain+chol+oldpeak, data3)
+anova(model3)
+
+# reoder the sequence of variables and have a look at the full model without interaction terms
+model3 = lm(maxhr ~ slope+age+exang+chestpain+chol+oldpeak
+            +restbp+fluoro+sex+fbs+extest+restecg, data3)
+anova(model3)
+```
+
+Conclusion:
+
+The summary shows that in the smaller selected model, all the selected variabbles are significant predictors. 
+And in the full model without considering interaction terms, it's also true that only the covariates from the selected smaller model are significant predictors. 
+
+
+
+### Part 10
+
+Consider interaction terms.
+
+Since there are many covariates, and this is not like a chemical reaction problem, thus here we can only consider the two-way interactions. 
+
+Also, since there are many covariates including categorical covariates, and many categorical covariates have several levels, there will be multiple testing issues when we are considering so many interaction terms. Some interaction terms will become significant while they are actually false positive. Therefore, first, we will try to break the problem into different steps. Second, we will try to reduce the size of the models step by step.
+
+(1) The smaller seleceted model with all two-way interaction terms.
+```{r}
+# include all two-way interactions within the smaller model
+model_small_inter = lm(maxhr ~ (slope+age+exang+chestpain+chol+oldpeak)**2, data3)
+anova(model_small_inter)
+
+# only add slope:chestpain, slope:age
+model_small_inter = lm(maxhr ~ slope+age+exang+chestpain+chol+oldpeak
+                       +slope:chestpain +slope:age, data3)
+anova(model_small_inter)
+
+# only add 
+model_small_inter = lm(maxhr ~ slope+age+exang+chestpain+chol+oldpeak
+                       +slope:chestpain, data3)
+anova(model_small_inter)
+```
+
+The smaller model with all the two-way interaction terms have only two potential significant interaction terms: "slope:age" and "slope:chestpain". When only adding these two interactions in the decreased order of their significance level (adding the more significant interaction first), the anova test shows that "slope:age" can be removed from the model. Therefore, for the selected smaller model, we can add one interaction term within themselves so far:
+$$maxhr \sim slope + age + exang + chestpain + chol + oldpeak + slope:chestpain$$
+
+Next, we will have a look at two-way interaction terms of covariates in the order of:
+$$ restecg \rightarrow extest \rightarrow fbs \rightarrow sex \rightarrow fluoro \rightarrow restbp$$
+
+
+(2) Interaction terms of "restecg".
+```{r}
+# interaction terms of "restecg"
+model3_restecg = lm(maxhr ~ slope+age+exang+chestpain+chol+oldpeak
+            +restbp+fluoro+sex+fbs+extest+restecg + slope:chestpain
+            +restecg:slope+restecg:age+restecg:exang+restecg:chestpain
+            +restecg:chol+restecg:oldpeak+restecg:restbp+restecg:fluoro
+            +restecg:sex+restecg:fbs+restecg:extest, data3)
+anova(model3_restecg)
+
+# reoder the interaction terms according to their significance level
+model3_restecg = lm(maxhr ~ slope+age+exang+chestpain+chol+oldpeak
+            +restbp+fluoro+sex+fbs+extest+restecg + slope:chestpain
+            +restecg:exang+restecg:slope+restecg:fbs
+            +restecg:age+restecg:chestpain+restecg:chol
+            +restecg:oldpeak+restecg:restbp+restecg:fluoro
+            +restecg:sex+restecg:extest, data3)
+anova(model3_restecg)
+
+# only add "restecg:slope", "restecg:fbs", "restecg:exang"
+model3_restecg = lm(maxhr ~ slope+age+exang+chestpain+chol+oldpeak
+            +restbp+fluoro+sex+fbs+extest+restecg + slope:chestpain
+            +restecg:slope+restecg:fbs+restecg:exang, data3)
+anova(model3_restecg)
+```
+
+Thus, so far, we consider not removing the variable "restecg" from the model, and add three of its interaction terms to the model: "restecg:slope", "restecg:fbs", "restecg:exang".
+
+
+(4) Interaction terms of "extest".
+```{r}
+# interaction terms of "extest"
+model3_extest = lm(maxhr ~ slope+age+exang+chestpain+chol+oldpeak
+            +restbp+fluoro+sex+fbs+extest+restecg + slope:chestpain
+            +restecg:slope+restecg:fbs+restecg:exang
+            +extest:slope+extest:age+extest:exang+extest:chestpain
+            +extest:chol+extest:oldpeak+extest:restbp+extest:fluoro
+            +extest:sex+extest:fbs+extest:restecg, data3)
+anova(model3_extest)
+
+# reoder the interaction terms according to their significance level
+model3_extest = lm(maxhr ~ slope+age+exang+chestpain+chol+oldpeak
+            +restbp+fluoro+sex+fbs+extest+restecg + slope:chestpain
+            +restecg:slope+restecg:fbs+restecg:exang
+            +extest:sex+extest:slope+extest:age+extest:exang
+            +extest:chestpain+extest:chol+extest:oldpeak+extest:restbp
+            +extest:fluoro+extest:fbs+extest:restecg, data3)
+anova(model3_extest)
+```
+
+Now none of interaction terms of "extest" is significant any more. Thus, so far, we can consider removing the variable "extest" from the model in the end. For now we keep it in the model to see if there are other ways of interactions with it.
+
+
+(5) Interaction terms of "fbs".
+```{r}
+# interaction terms of "fbs"
+model3_fbs = lm(maxhr ~ slope+age+exang+chestpain+chol+oldpeak
+            +restbp+fluoro+sex+fbs+extest+restecg + slope:chestpain
+            +restecg:slope+restecg:fbs+restecg:exang
+            +fbs:slope+fbs:age+fbs:exang+fbs:chestpain
+            +fbs:chol+fbs:oldpeak+fbs:restbp+fbs:fluoro
+            +fbs:sex+fbs:extest, data3)
+anova(model3_fbs)
+```
+
+We see that only the previously added interaction term "restecg:fbs" is significant for variable "fbs". Thus, so far, we consider not removing the variable "fbs" from the model, and keeping its previously added interaction term to the model: "restecg:fbs".
+
+
+(6) Interaction terms of "sex".
+```{r}
+# interaction terms of "sex"
+model3_sex = lm(maxhr ~ slope+age+exang+chestpain+chol+oldpeak
+            +restbp+fluoro+sex+fbs+extest+restecg + slope:chestpain
+            +restecg:slope+restecg:fbs+restecg:exang
+            +sex:slope+sex:age+sex:exang+sex:chestpain
+            +sex:chol+sex:oldpeak+sex:restbp+sex:fluoro
+            +sex:fbs+sex:extest+sex:restecg, data3)
+anova(model3_sex)
+
+# reoder the interaction terms according to their significance level
+model3_sex = lm(maxhr ~ slope+age+exang+chestpain+chol+oldpeak
+            +restbp+fluoro+sex+fbs+extest+restecg + slope:chestpain
+            +restecg:slope+restecg:fbs+restecg:exang
+            +sex:exang+sex:fbs+sex:slope+sex:age+sex:chestpain
+            +sex:chol+sex:oldpeak+sex:restbp+sex:fluoro
+            +sex:extest+sex:restecg, data3)
+anova(model3_sex)
+```
+
+Thus, so far, we consider not removing the variable "sex" from the model, and add two of its interaction terms to the model: "sex:exang", "sex:fbs".
+
+
+(7) Interaction terms of "fluoro".
+```{r}
+# interaction terms of "fluoro"
+model3_fluoro = lm(maxhr ~ slope+age+exang+chestpain+chol+oldpeak
+            +restbp+fluoro+sex+fbs+extest+restecg + slope:chestpain
+            +restecg:slope+restecg:fbs+restecg:exang+sex:exang+sex:fbs
+            +fluoro:slope+fluoro:age+fluoro:exang+fluoro:chestpain
+            +fluoro:chol+fluoro:oldpeak+fluoro:restbp+fluoro:sex
+            +fluoro:fbs+fluoro:extest+fluoro:restecg, data3)
+anova(model3_fluoro)
+
+# reoder the interaction terms according to their significance level
+model3_fluoro = lm(maxhr ~ slope+age+exang+chestpain+chol+oldpeak
+            +restbp+fluoro+sex+fbs+extest+restecg + slope:chestpain
+            +restecg:slope+restecg:fbs+restecg:exang+sex:exang+sex:fbs
+            +fluoro:age+fluoro:extest+fluoro:slope+fluoro:exang
+            +fluoro:chestpain+fluoro:chol+fluoro:oldpeak+fluoro:restbp
+            +fluoro:sex+fluoro:fbs+fluoro:restecg, data3)
+anova(model3_fluoro)
+
+# reoder the interaction terms again according to their significance level
+model3_fluoro = lm(maxhr ~ slope+age+exang+chestpain+chol+oldpeak
+            +restbp+fluoro+sex+fbs+extest+restecg + slope:chestpain
+            +restecg:slope+restecg:fbs+restecg:exang+sex:exang+sex:fbs
+            +fluoro:age+fluoro:extest+fluoro:sex+fluoro:slope+fluoro:exang
+            +fluoro:chestpain+fluoro:chol+fluoro:oldpeak+fluoro:restbp
+            +fluoro:fbs+fluoro:restecg, data3)
+anova(model3_fluoro)
+
+# reoder the interaction terms again according to their significance level
+model3_fluoro = lm(maxhr ~ slope+age+exang+chestpain+chol+oldpeak
+            +restbp+fluoro+sex+fbs+extest+restecg + slope:chestpain
+            +restecg:slope+restecg:fbs+restecg:exang+sex:exang+sex:fbs
+            +fluoro:age+fluoro:extest+fluoro:slope+fluoro:sex+fluoro:exang
+            +fluoro:chestpain+fluoro:chol+fluoro:oldpeak+fluoro:restbp
+            +fluoro:fbs+fluoro:restecg, data3)
+anova(model3_fluoro)
+```
+
+Thus, so far, we consider not removing the variable "fluoro" from the model, and add one of its interaction terms to the model: "fluoro:age".
+
+
+(8) Interaction terms of "restbp".
+```{r}
+# interaction terms of "restbp"
+model3_restbp = lm(maxhr ~ slope+age+exang+chestpain+chol+oldpeak
+            +restbp+fluoro+sex+fbs+extest+restecg + slope:chestpain
+            +restecg:slope+restecg:fbs+restecg:exang+sex:exang+sex:fbs+fluoro:age
+            +restbp:slope+restbp:age+restbp:exang+restbp:chestpain
+            +restbp:chol+restbp:oldpeak+restbp:fluoro+restbp:sex
+            +restbp:fbs+restbp:extest+restbp:restecg, data3)
+anova(model3_restbp)
+```
+
+Thus, so far, we consider not removing the variable "restbp" from the model, and add one of its interaction terms to the model: "restbp:slope".
+
+Conclusion:
+
+So far, after examing the interaction terms of the other covariates (not the ones in the selected smaller model), we have added seven interaction terms into the model: "restecg:slope", "restecg:fbs", "restecg:exang", "sex:exang", "sex:fbs", "fluoro:age", "restbp:slope". There is no interaction terms of variable "extest", so now we can remove this variable from the model.
+
+Next, we try to further explore the current model with all the eight interaction terms and see if we can further reduce the size of the model.
+
+(9) Explore the current model.
+```{r}
+model = lm(maxhr ~ slope+age+exang+chestpain+chol+oldpeak
+            +restbp+fluoro+sex+fbs+restecg + slope:chestpain
+            +restecg:slope +restecg:fbs +restecg:exang
+            +sex:exang +sex:fbs +fluoro:age +restbp:slope, data3)
+anova(model)
+
+# reoder the interaction terms again according to their significance level
+model = lm(maxhr ~ slope+age+exang+chestpain+chol+oldpeak
+            +restbp+fluoro+sex+fbs+restecg + slope:chestpain
+            +sex:exang +fluoro:age +restecg:exang
+            +sex:fbs +restecg:slope +restbp:slope +restecg:fbs, data3)
+anova(model)
+
+# remove "restecg:fbs"
+# reoder the interaction terms again according to their significance level
+model = lm(maxhr ~ slope+age+exang+chestpain+chol+oldpeak
+            +restbp+fluoro+sex+fbs+restecg + slope:chestpain
+            +sex:exang +fluoro:age +sex:fbs
+            +restecg:slope +restbp:slope +restecg:exang, data3)
+anova(model)
+
+# reoder the interaction terms again according to their significance level
+model = lm(maxhr ~ slope+age+exang+chestpain+chol+oldpeak
+            +restbp+fluoro+sex+fbs+restecg + slope:chestpain
+            +sex:exang +sex:fbs +fluoro:age 
+            +restecg:exang +restecg:slope +restbp:slope, data3)
+anova(model)
+
+# reoder the interaction terms again according to their significance level
+model = lm(maxhr ~ slope+age+exang+chestpain+chol+oldpeak
+            +restbp+fluoro+sex+fbs+restecg + slope:chestpain
+            +sex:exang +sex:fbs +fluoro:age
+            +restecg:slope +restbp:slope +restecg:exang, data3)
+anova(model)
+```
+
+After several trials, only the interaction term "restecg:fbs" got removed from the model.
+
+Now we get the model with seven interaction terms: \(maxhr \sim slope + age + exang + chestpain + chol + oldpeak + restbp + fluoro + sex + fbs + restecg + slope:chestpain + exang:sex + sex:fbs + age:fluoro + slope:restecg + slope:restbp + exang:restecg\)
+
+Then, let's have a look at the model summary.
+```{r}
+model = lm(maxhr ~ slope+age+exang+chestpain+chol+oldpeak
+            +restbp+fluoro+sex+fbs+restecg + slope:chestpain
+            +sex:exang +sex:fbs +fluoro:age
+            +restecg:slope +restbp:slope +restecg:exang, data3)
+summary(model)
+```
+
+Here we see that one of interaction term of "slope:restecg" has NA values for coefficients, which indicates that this term may be linearly related to the other terms. Thus, we should remove the whole interaction term of "slope:restecg" to address with this problem. 
+
+Therefore, now we have six interaction terms left: \(maxhr \sim slope + age + exang + chestpain + chol + oldpeak + restbp + fluoro + sex + fbs + restecg + slope:chestpain + exang:sex + sex:fbs + age:fluoro + slope:restbp + exang:restecg\)
+
+Then, we have a look at the anova tests again.
+```{r}
+model = lm(maxhr ~ slope+age+exang+chestpain+chol+oldpeak
+            +restbp+fluoro+sex+fbs+restecg + slope:chestpain
+            +sex:exang +sex:fbs +fluoro:age
+            +restbp:slope +restecg:exang, data3)
+anova(model)
+
+# remove "slope:restbp", "exang:restecg" and variables "restecg", "restbp"
+model = lm(maxhr ~ slope+age+exang+chestpain+chol+oldpeak
+            +fluoro+sex+fbs + slope:chestpain
+            +sex:exang +sex:fbs +fluoro:age, data3)
+anova(model)
+```
+
+Now, we can remove the interaction terms "slope:restbp" and "exang:restecg" from the model. So there is no any interaction terms of "restecg" and "restbp" left in the model thus we can remove them as well.
+
+Now we get the model with four interaction terms: \(maxhr \sim slope + age + exang + chestpain + chol + oldpeak + fluoro + sex + fbs + slope:chestpain + exang:sex + sex:fbs + age:fluoro\)
+
+Then, let's have a look at the model summary.
+```{r}
+model = lm(maxhr ~ slope+age+exang+chestpain+chol+oldpeak
+            +fluoro+sex+fbs + slope:chestpain
+            +sex:exang +sex:fbs +fluoro:age, data3)
+summary(model)
+```
+
+Conclusion:
+
+Therefore, we now get our final model: \(maxhr \sim slope + age + exang + chestpain + chol + oldpeak + fluoro + sex + fbs + slope:chestpain + exang:sex + sex:fbs + age:fluoro\)
+
+
+
+### Part 11
+
+Prediction error.
+
+Now we use leave-one-out cross validation to calculate the average of prediction errors.
+```{r}
+# leave-one-out cross-validation to compute the average of prediction error
+n = nrow(data3)
+store_pred_error = rep(0,n)
+
+for (i in 1:n) {
+    model = lm(maxhr ~ slope+age+exang+chestpain+chol+oldpeak
+            +fluoro+sex+fbs + slope:chestpain
+            +sex:exang +sex:fbs +fluoro:age, data3)
+    xi = data.frame(data3[i,-13])
+    fitted_yi = predict(model, xi)[1]
+    store_pred_error[i] = data3[i,13] - fitted_yi
+}
+ave_square_error = sum(store_pred_error^2)/n
+print(paste0("average of prediction error = ",ave_square_error))
+```
+
+Note that this average of prediction error is much smaller than the previous lasso regression model with best lambda value, so now our model is performing better.

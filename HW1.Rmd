@@ -1,0 +1,163 @@
+---
+title: "Homework1"
+author: "Gulishana Adilijiang"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+  html_notebook: default
+---
+
+### Problem 1
+#### (a) 
+```{r}
+library(faraway)
+data(gala)
+x = gala$Area
+y = gala$Endemics
+plot(x,y, xlab = "Area", ylab = "Endemics")
+```
+
+Answer: According to the scatterplot, a linear model is not appropriate for this data set. Most of the islands have a small size of area while some islands have a quite larger size of area. 
+
+```{r}
+summary(x)
+hist(x, main = "Area of the Islands", xlab = "Area", breaks = 10)
+```
+
+Answer: There is an island which has a very large size of area comparing with the most of other islands. It looks like an outlier data point.
+
+#### (b)
+```{r}
+x = log(gala$Area)
+plot(x,y, xlab = "log(Area)", ylab = "Endemics")
+```
+
+Answer: According to the scatterplot, a linear model seems to be appropriate for this data set.
+
+#### (c)
+```{r}
+SXY = sum((x-mean(x))*(y-mean(y)))
+SXX = sum((x-mean(x))^2)
+beta1_hat = SXY/SXX; beta1_hat
+beta0_hat = mean(y)-beta1_hat*mean(x); beta0_hat
+
+y_hat = beta0_hat + beta1_hat * x
+residuals = y - y_hat
+n = length(x)
+variance_hat = sum((residuals^2)) / (n-2) ; variance_hat
+```
+Answer: So \(\hat{\beta_{0}}\) = 15.69099, \(\hat{\beta_{1}}\) = 6.697806, \(\hat{\sigma^2}\) = 204.2586
+
+#### (d)
+```{r}
+x_new = log(2.0)
+y_new = beta0_hat + beta1_hat * x_new ; y_new
+```
+Answer: So the predicted number of species is 20.
+
+
+### Problem 2
+#### (a)
+```{r}
+cor(y_hat, residuals)
+```
+Answer: The correlation between the vector of fitted values and the vector of residuals is close to zero. This is consistent with the OLS property that the covariance between the fitted values and the residuals is zero.
+
+#### (b)
+```{r}
+cor(residuals, gala$Nearest)
+```
+Answer: The vector of residuals and the variable gala$Nearest has a negative correlation which equals to -0.4. This means when the island is farther from any other island, the residuals become smaller. It makes sense because the distance from one island to its nearest island is correlated with the area of the island and the number of endemic species on the island, so it affects the relationship of these two variables.
+
+
+### Problem 4
+#### (a)
+```{r}
+empirical_vector = NULL
+for (i in 1:1000){
+    # generate simulated data set
+    x = runif(n = 100, min = -1, max = 1)
+    error = rnorm(n = 100, mean = 0, sd = 1)
+    y = 1 + x + error
+    
+    # compute OLS estimate of beta1_hat
+    model = lm(y ~ x)
+    summary(model)
+    beta1_hat = summary(model)$coefficients[2,1]
+    
+    # compute the 90% confidence interval for true coefficient beta1
+    std_beta1_hat = summary(model)$coefficients[2,2]
+    alpha = 1- 0.9
+    t_value = qt(p = 1-alpha/2, df=100-2)
+    confidence_interval_lower = beta1_hat - std_beta1_hat * t_value
+    confidence_interval_upper = beta1_hat + std_beta1_hat * t_value
+    
+    # measure if the confidence interval actually contains true beta1 (= 1)
+    empirical = (1>=confidence_interval_lower & 1<=confidence_interval_upper)
+    empirical_vector[i] = empirical
+}
+
+coverage_rate = sum(empirical_vector) / length(empirical_vector) ; coverage_rate
+```
+
+#### (b)
+```{r}
+empirical_vector = NULL
+for (i in 1:1000){
+    # generate simulated data set
+    x = runif(n = 100, min = -1, max = 1)
+    error = rnorm(n = 100, mean = 0, sd = abs(x))
+    y = 1 + x + error
+    
+    # compute OLS estimate of beta1_hat
+    model = lm(y ~ x)
+    summary(model)
+    beta1_hat = summary(model)$coefficients[2]
+    
+    # compute the 90% confidence interval for true coefficient beta1
+    std_beta1_hat = summary(model)$coefficients[4]
+    alpha = 1- 0.9
+    t_value = qt(p = 1-alpha/2, df=100-2)
+    confidence_interval_lower = beta1_hat - std_beta1_hat * t_value
+    confidence_interval_upper = beta1_hat + std_beta1_hat * t_value
+    
+    # measure if the confidence interval actually contains true beta1 (= 1)
+    empirical = (1>=confidence_interval_lower & 1<=confidence_interval_upper)
+    empirical_vector[i] = empirical
+}
+
+coverage_rate = sum(empirical_vector) / length(empirical_vector) ; coverage_rate
+```
+
+#### (c)
+```{r}
+empirical_vector = NULL
+for (i in 1:1000){
+    # generate simulated data set
+    x = runif(n = 100, min = -1, max = 1)
+    error = rnorm(n = 100, mean = 0, sd = abs(1-abs(x)) )
+    y = 1 + x + error
+    
+    # compute OLS estimate of beta1_hat
+    model = lm(y ~ x)
+    summary(model)
+    beta1_hat = summary(model)$coefficients[2]
+    
+    # compute the 90% confidence interval for true coefficient beta1
+    std_beta1_hat = summary(model)$coefficients[4]
+    alpha = 1- 0.9
+    t_value = qt(p = 1-alpha/2, df=100-2)
+    confidence_interval_lower = beta1_hat - std_beta1_hat * t_value
+    confidence_interval_upper = beta1_hat + std_beta1_hat * t_value
+    
+    # measure if the confidence interval actually contains true beta1 (= 1)
+    empirical = (1>=confidence_interval_lower & 1<=confidence_interval_upper)
+    empirical_vector[i] = empirical
+}
+
+coverage_rate = sum(empirical_vector) / length(empirical_vector) ; coverage_rate
+```
+
+#### (d)
+Answer: If the linear regression model have non-constant error variance, it will break the Gauss-Markov theorem so that the OLS estimators will not be the Best Linear Unbiased Estimators and their variances will not be the lowest of all the other unbiased estimators. In this case, the OLS coefficient estimates are not biased, but the OLS estimates of the standard errors of coefficients are biased which lead to biased inference of coefficients.

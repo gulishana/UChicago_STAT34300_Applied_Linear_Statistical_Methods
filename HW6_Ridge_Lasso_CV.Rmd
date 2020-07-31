@@ -1,0 +1,342 @@
+---
+title: "Homework 6"
+author: "Sarah Adilijiang"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+### Problem 1
+#### (a) Pairwise Correlations
+```{r}
+library(faraway)
+data(seatpos)
+model_ls = lm(hipcenter~., seatpos)
+summary(model_ls)
+
+# pairwise correlations
+library(corrplot)
+pair_cor = round(cor(seatpos),3); pair_cor 
+corrplot(pair_cor, method="shade", tl.col="black",tl.srt=45)
+```
+Answer:
+
+There are several large pairwise correlations both between covariates and between covariates and the response, which indicates multicollinearity problem of the dataset. Especially, the covariates "HtShoes", "Ht", and "Seated" are highly correlated with each other.
+
+Highly collinearity will lead to imprecise estimate of coefficients, inflate the variance of the coefficients, and fail to reveal significant factors via t-tests. We can see in the model summary, the p-value of F-test is quite small but none of the individual covariates is significant.
+
+Therefore, it's better to keep only one of highly correlated predictors in the model to keep the model simple and reduce the inflated variance.
+
+
+#### (b) Standardization of covariates
+```{r}
+# standardization (z-score normalization) of covariates
+n = nrow(seatpos)
+seatpos2 = scale(seatpos[-9], center = colMeans(seatpos[-9]), scale=FALSE)  # or center=TRUE
+seatpos2 = scale(seatpos2, center=FALSE, 
+                 scale = sqrt(colSums(seatpos2^2)/n) ) # if use scale=TRUE, it's dividing by (n-1)
+seatpos3 = cbind(data.frame(seatpos2), seatpos$hipcenter)
+colnames(seatpos3)[9] = "hipcenter"
+
+# Check the standardization results
+colMeans(seatpos3)
+colSums(seatpos3^2)
+```
+Answer:
+
+According to the results check, we have standardized each covariate to have zero mean and squared norm of n=38. And the response "hipcenter" was not standardized.
+
+
+#### (c) **Ridge regression**
+```{r}
+# ridge regression
+library(MASS)
+model_ridge = lm.ridge(hipcenter~., seatpos3, lambda = c(0,0.1,1,2,5,10,20,50))
+betahat = coef(model_ridge); betahat
+```
+Answer:
+
+Without ridge regularization (\(\lambda = 0\)), the range of estimated coefficients (not inlcuding intercept) is large: \(abs(\hat{\beta_j}) \in (0.93, 29.62)\).
+
+With ridge regularization, range of estimated coefficients start to shrink, i.e. the size of coefficients are becoming closer to each other, and the larger the coefficient is, the faster it will shrink. With \(\lambda\) becoming larger, the smaller the range is and the smaller the L2-norm of coefficient vector is. At largest \(\lambda = 50\), the range of estimated coefficients (not inlcuding intercept) is the smallest: \(abs(\hat{\beta_j}) \in (4.17, 8.17)\).
+
+In particular, the \(abs(\hat{\beta_j})\) of covariates "HtShoes", "Ht", and "Seated" are in the range of (2.60, 29.62) without ridge regularization, and becomes spread nearly equally within the range of (5.87, 7.14) when \(\lambda = 50\). The coefficient of "HtShoes" shrinks very fast while the coefficients of "Ht" and "Seated" change from positive values to negative values and increase their sizes to close to coefficient of "HtShoes". Therefore, for highly correlated covariates, ridge regression will prefer the correlated coefficients to be spread equally when the L2-norm of coefficients are becoming smaller.
+
+
+#### (d) **Leave-one-out** Cross-Validation of **Ridge regression**
+```{r}
+# leave-one-out cross-validation of ridge regression
+n = nrow(seatpos3)
+lambdas = seq(0,50,by=0.1)
+ave_square_error = rep(0,length(lambdas))
+    
+for (k in 1:length(lambdas)){
+    store_pred_error = rep(0,n)
+    for (i in 1:n) {
+        model_ridge = lm.ridge(hipcenter~., seatpos3[-i,], lambda=lambdas[k])
+        betahat = coef(model_ridge)
+        xi = seatpos3[i,-9]
+        fitted_yi = unlist(c(1,xi)) %*% as.vector(betahat)
+        store_pred_error[i] = seatpos3[i,9] - fitted_yi
+    }
+    ave_square_error[k] = sum(store_pred_error^2)/n
+}
+
+# plot leave-one-out error against lambda
+plot(lambdas, ave_square_error, main="Ridge regression",
+     xlab=expression(lambda), ylab="Leave-one-out Error")
+
+# find the best lambda value
+best_lambda_ridge = lambdas[which.min(ave_square_error)]
+print(paste0("best lambda = ",best_lambda_ridge))
+```
+Answer:
+
+According to the plots, as \(\lambda\) increases from 0 to 23.6, the average of squared leave-one-out prediction error substantially decreases, especially within the region of \(\lambda \in (0,10)\). Then, as \(\lambda\) increases from 23.6 to 50, the average of squared leave-one-out prediction error slowly increases again.
+
+Therefore, ridge regularization dose offer substantial improvement of the prediction error. And here it reduces the prediction error to the most extent at \(\lambda\) = 23.6. 
+
+
+```{r}
+# fit the ridge regression model with the best lambda value and get the coefficients
+model_ridge = lm.ridge(hipcenter~., seatpos3, lambda = best_lambda_ridge)
+coef(model_ridge)
+
+# compare with coefficients of least squares model (after standardizing covariates)
+model_ls = lm(hipcenter~., seatpos3)
+coef(model_ls)
+```
+Answer:
+
+The intercept is not penalized thus not changed. As for the other coefficients, the range of estimated coefficients in the least squares model (after standardizing covariates) is large: \(abs(\hat{\beta_j}) \in (0.93, 29.62)\). And the range of estimated coefficients in the ridge regression model with best lambda value (after standardizing covariates) is smaller: \(abs(\hat{\beta_j}) \in (3.75, 10.44)\).
+
+In particular, the coefficient of "HtShoes" has an opposite sign with and its size is much larger than coefficients of "Ht" and "Seated" in the least squares model, but the size of "HtShoes" shrinks fast and finally becomes nearly equal to coefficients of "Ht" and "Seated" in the ridge model. And the coefficients of "Ht" and "Seated" change from positive values to negative values and increase their sizes to close to coefficient of "HtShoes" in the ridge model. Therefore, for highly correlated covariates, ridge regression will prefer the correlated coefficients to be spread equally when the L2-norm of coefficients are becoming smaller.
+
+
+#### (e) **Lasso**
+```{r}
+# lasso regression
+library(glmnet)
+model_lasso = glmnet(x = as.matrix(seatpos3[-9]), y = as.matrix(seatpos3[9]), 
+                     lambda = c(0,0.1,1,2,5,10,20,50))  # default alpha=1 Lasso
+betahat = rbind(model_lasso$a0, as.matrix(model_lasso$beta))
+colnames(betahat) = model_lasso$lambda
+rownames(betahat)[1] = "(Intercept)"
+betahat
+```
+Answer:
+
+Without lasso regularization (\(\lambda = 0\)), the range of estimated coefficients (not inlcuding intercept) is large: \(abs(\hat{\beta_j}) \in (0.97, 24.22)\) and are all nonzeros.
+
+With lasso regularization, most of estimated coefficients start to shrink and are finally forced to zeros when keep increasing the \(\lambda\) value. With \(\lambda\) becoming larger, the lower number of coefficients are kept in the model (fewer nonzeros), and the smaller the L1-norm of coefficient vector is. At largest \(\lambda = 50\), only the intercept is left in the model, all the other coefficients are forced to zeros.
+
+In particular, the \(abs(\hat{\beta_j})\) of covariates "HtShoes" and "Seated" shrink more as \(\lambda\) becomes larger, and finally shrink to zeros and do not change any more when keep increasing \(\lambda\). However, the coefficient of "Ht" first shrink to zero and then change the sign to negative values and starts to increase its size as \(\lambda\) becomes larger. When coefficients of "HtShoes" and "Seated" have become zeros after \(\lambda = 5\), the coefficient of "Ht" becomes the only one left in the model among these three highly correlated covariates. Therefore, for highly correlated covariates, lasso regression will prefer sparse coefficients, giving all the weights to a single one of correlated coefficients and keeping only that one in the model.
+
+
+#### (f) **Leave-one-out** cross-validation of **Lasso**
+```{r}
+# leave-one-out cross-validation of lasso regression
+n = nrow(seatpos3)
+lambdas = seq(0,50,by=0.1)
+ave_square_error = rep(0,length(lambdas))
+    
+for (k in 1:length(lambdas)){
+    store_pred_error = rep(0,n)
+    for (i in 1:n) {
+        model_lasso = glmnet(x = as.matrix(seatpos3[-i,-9]), y = as.matrix(seatpos3[-i,9]),
+                             lambda=lambdas[k])
+        betahat = rbind(model_lasso$a0, as.matrix(model_lasso$beta))
+        xi = seatpos3[i,-9]
+        fitted_yi = unlist(c(1,xi)) %*% as.vector(betahat)
+        store_pred_error[i] = seatpos3[i,9] - fitted_yi
+    }
+    ave_square_error[k] = sum(store_pred_error^2)/n
+}
+
+# plot leave-one-out error against lambda
+plot(lambdas, ave_square_error, main="Lasso regression",
+     xlab=expression(lambda), ylab="Leave-one-out Error")
+
+# find the best lambda value
+best_lambda_lasso = lambdas[which.min(ave_square_error)]
+print(paste0("best lambda = ",best_lambda_lasso))
+```
+Answer:
+
+According to the plots, as \(\lambda\) increases from 0 to 7.1, the average of squared leave-one-out prediction error substantially decreases, especially within the region of \(\lambda \in (0,1)\). Then, as \(\lambda\) increases from 7.1 to 50, the average of squared leave-one-out prediction error substantially increases again and reaches a plateau near 50.
+
+Therefore, lasso regularization dose offer substantial improvement of the prediction error. And here it reduces the prediction error to the most extent at \(\lambda\) = 7.1. 
+
+
+```{r}
+# fit the lasso regression model with the best lambda value and get the coefficients
+model_lasso = glmnet(x = as.matrix(seatpos3[-9]), y = as.matrix(seatpos3[9]), 
+                     lambda = best_lambda_lasso)
+betahat = rbind(model_lasso$a0, as.matrix(model_lasso$beta))
+colnames(betahat) = model_lasso$lambda
+rownames(betahat)[1] = "(Intercept)"
+betahat
+
+# compare with coefficients of least squares model (after standardizing covariates)
+model_ls = lm(hipcenter~., seatpos3)
+coef(model_ls)
+```
+Answer:
+
+The intercept is not penalized thus not changed. As for the other coefficients, the estimated coefficients of the least squares model (after standardizing covariates) are all nonzeros. However, in the lasso regression model (after standardizing covariates) , most of the estimated coefficients are forced to zeros. Only the coefficients of "Age", "Ht", and "Leg" are nonzeros, and the coefficients of "Age" and "Leg" have shrunk the size comparing with the least squares model, while the coefficient of "Ht" has changed the sign and increased its size.
+
+In particular, only one of covariates "Ht", "HtShoes" and "Seated" is left in the lasso regression model, which is "Ht". Therefore, for highly correlated covariates, lasso regression will prefer sparse coefficients, giving all the weights to a single one of correlated coefficients and keeping only that one in the model.
+
+
+#### (g) Bootstrap
+```{r}
+# bootstrap data 1000 times
+set.seed(0)
+n = nrow(seatpos3)
+betahat_ls = matrix(rep(0,9000), nrow=9, ncol=1000)
+betahat_ridge = matrix(rep(0,9000), nrow=9, ncol=1000)
+betahat_lasso = matrix(rep(0,9000), nrow=9, ncol=1000)
+
+for (i in 1:1000){
+    indices = sample(1:n, n, replace = TRUE)
+    boot_data = seatpos3[indices, ]
+    
+    # least squares model
+    model_ls = lm(hipcenter~., boot_data)
+    betahat_ls[,i] = coef(model_ls)
+    
+    # Ridge regression model
+    model_ridge = lm.ridge(hipcenter~., boot_data, lambda = best_lambda_ridge)
+    betahat_ridge[,i] = coef(model_ridge)
+    
+    # Lasso regression model
+    model_lasso = glmnet(x = as.matrix(boot_data[-9]), y = as.matrix(boot_data[9]), 
+                     lambda = best_lambda_lasso)
+    betahat_lasso[,i] = rbind(model_lasso$a0, as.matrix(model_lasso$beta))
+}
+
+hist(betahat_ls[4,], main="Least Squares", xlab=expression(hat(beta)[HtShoes]), breaks=30)
+hist(betahat_ridge[4,], main="Ridge regression", xlab=expression(hat(beta)[HtShoes]), breaks=30)
+hist(betahat_lasso[4,], main="Lasso regression", xlab=expression(hat(beta)[HtShoes]), breaks=30)
+```
+Answer:
+
+(1) In the least squares model, the range of \(\hat{\beta}_{HtShoes}\) is large, nearly from -400 to 300, and the majority fall in the range of (-80, 40). This indicates that when the design matrix is collinear the least squares estimates of coefficients will be unstable and have inflated variance.
+
+(2) In the ridge regression model, the range of \(\hat{\beta}_{HtShoes}\) is much smaller, nearly from -14 to -2, and the majority fall in the range of (-9.5, -6). This indicates that ridge regularization will shrink the size of coefficients and reduce the variance of coefficients (at the price of increasing the bias).
+
+(3) In the lasso regression model, the range of \(\hat{\beta}_{HtShoes}\) is much smaller than that of least squares model but larger than the ridge regression model, nearly from -50 to 0. However, the distribution of \(\hat{\beta}_{HtShoes}\) is highly skewed and mostly forced to zeros. This indicates that lasso regularization will also shrink the size of coefficients and reduce the variance of coefficients (at the price of increasing the bias), but it will prefer and reach sparsity of coefficients (i.e. substantially reduce the number of coefficients).
+
+
+#### (h)
+```{r}
+plot(betahat_ls[4,], betahat_ls[5,], main="Least Squares", 
+     xlab = expression(hat(beta)[HtShoes]), ylab = expression(hat(beta)[Ht]))
+plot(betahat_ridge[4,], betahat_ridge[5,], main="Ridge regression", 
+     xlab = expression(hat(beta)[HtShoes]), ylab = expression(hat(beta)[Ht]))
+plot(betahat_lasso[4,], betahat_lasso[5,], main="Lasso regression", 
+     xlab = expression(hat(beta)[HtShoes]), ylab = expression(hat(beta)[Ht]))
+```
+Answer:
+
+(1) In the least squares model, both the range of \(\hat{\beta}_{HtShoes}\) and \(\hat{\beta}_{Ht}\) are similar and large, nearly from -400 to 400. And \(\hat{\beta}_{HtShoes}\) and \(\hat{\beta}_{Ht}\) are highly negative correlated. This indicates that when the covariates are highly positive correlated, their coefficients will be highly negative correlated in the least squares model and have inflated large variances.
+
+(2) In the ridge regression model, both the range of \(\hat{\beta}_{HtShoes}\) and \(\hat{\beta}_{Ht}\) are similar and much smaller than those of least squares model, nearly from -14 to -2. And \(\hat{\beta}_{HtShoes}\) and \(\hat{\beta}_{Ht}\) are even more highly positive correlated. This indicates that when the covariates are highly positive correlated, their coefficients will be also highly positive correlated in the ridge regression model and have reduced variances than the least quares model.
+
+(3) In the lasso regression model, both the range of \(\hat{\beta}_{HtShoes}\) and \(\hat{\beta}_{Ht}\) are similar and much smaller than that of least squares model but larger than the ridge regression model, nearly from -50 to 0. However, in the most cases, either one and only one of \(\hat{\beta}_{HtShoes}\) and \(\hat{\beta}_{Ht}\) is forced to zero. And there are some cases where both of them are forced to zeros. This indicates that when the covariates are highly positive correlated, lasso regularization will prefer to keep only one (or none) of them in the model to substantially reduce the number of coefficients. Also, lasso regularization will shrink the size of remaining coefficients in the model and reduce the variance of coefficients.
+
+
+
+### Problem 2
+```{r}
+library(faraway)
+data(trees)
+
+# fit a raw second-order polynomial regression including the interaction term
+model_raw = lm(log(Volume)~Girth+Height+I(Girth^2)+I(Height^2)+I(Girth*Height), trees)
+# same with : model = lm(log(Volume)~polym(Girth, Height, degree=2, raw=TRUE), trees)
+
+summary(model_raw)
+```
+
+The summary shows that the regression is significant, however, only one covariate "Girth" is significant in this model.
+
+Then, we use several ways to check whether this model may be reasonably simplified. Notice that we should not remove the interaction term without removing the corresponding second-order terms. So there are six possible smaller models to consider.
+
+(1) Adjusted R-squared
+```{r}
+# compare the adjusted-R squares of all smaller models with the full model
+model1 = lm(log(Volume)~Girth+Height, trees)
+model2 = lm(log(Volume)~Girth+Height+I(Girth^2), trees)
+model3 = lm(log(Volume)~Girth+Height+I(Height^2), trees)
+model4 = lm(log(Volume)~Girth+Height+I(Girth*Height), trees)
+model5 = lm(log(Volume)~Girth+Height+I(Girth^2)+I(Girth*Height), trees)
+model6 = lm(log(Volume)~Girth+Height+I(Height^2)+I(Girth*Height), trees)
+
+adj_R_squared = rbind(
+    summary(model1)$adj.r.squared,
+    summary(model2)$adj.r.squared,
+    summary(model3)$adj.r.squared,
+    summary(model4)$adj.r.squared,
+    summary(model5)$adj.r.squared,
+    summary(model6)$adj.r.squared,
+    summary(model_raw)$adj.r.squared
+); adj_R_squared
+
+which.max(adj_R_squared)
+```
+Answer:
+
+Here the adjusted R-squared has the maximum value for model2: log(Volume) ~ Girth + Height + I(Girth^2), so model2 is preferred in this case.
+
+
+(2) Forward selection
+```{r}
+# forward selection using AIC
+fit_start = lm(log(Volume)~Girth+Height, trees)
+fit_forward_aic = step(fit_start, log(Volume)~Girth+Height+I(Girth^2)+I(Height^2)+I(Girth*Height),
+                       direction = "forward")
+fit_forward_aic
+```
+Answer:
+
+Here the AIC of forward selection also prefers model2: log(Volume) ~ Girth + Height + I(Girth^2), so model2 is selected in this case.
+
+
+(3) Backward elimination
+```{r}
+# backward selection using AIC
+fit_backward_aic = step(model_raw, direction = "backward")
+fit_backward_aic
+```
+Answer:
+
+Here the AIC of backward elimination again prefers model2: log(Volume) ~ Girth + Height + I(Girth^2), so model2 is selected in this case.
+
+
+(4) Orthogonal polynomials
+```{r}
+# fit an orthogonal second-order polynomial regression including the interaction term 
+model_orthogonal = lm(log(Volume)~polym(Girth, Height, degree=2), trees)
+summary(model_orthogonal)
+```
+Answer:
+
+Here the orthogonal polynomial model summary shows that only the simplest model with first-order terms is preferred, which is model1: log(Volume) ~ Girth + Height.
+
+
+(5) Final decision
+```{r}
+# compare model1 with model2
+anova(model1, model2)
+```
+Answer:
+
+The p-value of F-test is 0.001851, so we reject null hypothesis and prefer model2: log(Volume) ~ Girth + Height + I(Girth^2).
+
+Finally, we pick model2 as our reasonably simplified model: log(Volume) ~ Girth + Height + I(Girth^2).
+
+
+
+### Problem 3
+see next page

@@ -1,0 +1,185 @@
+---
+title: "Homework 2"
+author: "Sarah Adilijiang"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+### Problem 1
+#### (a) 
+```{r}
+# generate simulated data set, there are n = 100 data points
+
+# choose the values of correlation, coefficients, and simga
+cor = 0.8
+beta0 = 5 ; beta1 = -1 ; beta2 = 2
+sigma = 1
+
+# suppose x1, x2 ~ N(0,0,1,1,cor)
+library(MASS)
+mu = c(0,0)
+cov_matrix = matrix(c(1,cor,cor,1),2,2)
+bvn = mvrnorm(n=100, mu, cov_matrix)
+x1 = bvn[,1]
+x2 = bvn[,2]
+
+# linear model for Y
+error = rnorm(n=100, mean = 0, sd = sigma)
+y = beta0 + beta1 * x1 + beta2 * x2 + error
+
+# fit model Y ~ X1
+model1 = lm(y ~ x1)
+model1$coefficients[2]
+
+# fit model Y ~ X1 + X2
+model2 = lm(y~ x1 +x2)
+model2$coefficients[2]
+```
+Answer: 
+
+Under the above parameters setting, if fit a linear model of \(Y\) on covariate \(X_{1}\) only , the fiited slope is generally positive, and if fit a linear model of \(Y\) on both covariates \(X_{1}\) and \(X_{2}\), the coefficient on \(X_{1}\) is generally negative.
+
+
+#### (b) 
+Answer: 
+
+For example, \(Y\) is the exam score of a student, \(X_{1}\) is the time the student is present in office hour in hours per week, \(X_{2}\) is the time the student spend on study in hours per week. In this case, if fit a linear model of \(Y\) on \(X_{1}\) only , the fiited slope is plausibly positive, since the more time in office hour may help a student better understand the course materials thereby get a higher exam score. However, if fit a linear model of \(Y\) on both \(X_{1}\) and \(X_{2}\), the coefficient on \(X_{1}\) is plausibly negative, because when including the time the student spend on study per week, a student who study more time a week may have already had a better understanding of course materials so he/she is less likely to go to the office hour for further help.
+
+
+### Problem 2
+```{r}
+library(faraway)
+data(prostate)
+model = lm(lpsa ~ ., data = prostate)
+summary(model)
+```
+
+#### (a)
+```{r}
+# 90% Confidence Interval for parameter associated with "age"
+confint(model, "age", level = 0.90)
+
+# 95% Confidence Interval for parameter associated with "age"
+confint(model, "age", level = 0.95)
+```
+Answer: 
+
+In regression summary, \(H_{0}\): \(\beta_{age}\) = 0
+
+90% CI does not contain 0, Reject \(H_{0}\) at \(\alpha\) = 0.1 level, so p-value < 0.1
+
+95% CI contains 0, Do Not Reject \(H_{0}\) at \(\alpha\) = 0.05 level, so p-value > 0.05
+
+Therefore, we can deduce that   0.05 < p-value < 0.1
+
+Indeed, the regression summary shows that the parameter associated with age has p-value = 0.08229
+
+
+#### (b)
+```{r}
+# plot the 95% joint confidence region
+library(ellipse)
+plot( ellipse(model, c(4,5), level = 0.95), type = "l", xlim = c(-0.05,0.01)) # default level = 0.95 
+
+# plot the origin
+points(0,0)
+```
+Answer: 
+
+The test is that \(H_{0}\): \(\beta_{age}\) = \(\beta_{lbph}\) = 0
+
+According to the plot, the origin lies inside the ellipse, so we Do Not Reject \(H_{0}\) at \(\alpha\) = 0.05 level
+
+
+#### (c)
+```{r}
+new_x = data.frame(lcavol=1.44692,lweight=3.62301,age=65.00000,
+                   lbph=0.30010,svi=0.00000,lcp=-0.79851,
+                   gleason=7.00000,pgg45=15.00000)
+predict(model, new_x, interval = "prediction", level = 0.95)
+```
+Answer: 
+
+The predicted value of lpsa is 2.389053, and the 95% prediction interval is (0.9646584, 3.813447)
+
+
+#### (d)
+```{r}
+new_x = data.frame(lcavol=1.44692,lweight=3.62301,age=20.00000,
+                   lbph=0.30010,svi=0.00000,lcp=-0.79851,
+                   gleason=7.00000,pgg45=15.00000)
+predict(model, new_x, interval = "prediction", level = 0.95)
+```
+Answer: 
+
+The predicted value of lpsa is 3.272726, and the 95% prediction interval is (1.538744, 5.006707)
+
+```{r}
+summary(prostate$age)
+```
+Answer: 
+
+Because age=65 is within the observation range of "age" data but age=20 is already out of the observation range of "age" data, so the prediction interval for age=20 is wider.
+
+On the other hand, the mean of age is 63.87, so age=20 is much farther away from the mean than age=65, therefore the prediction interval for age=20 is wider.
+
+
+### Problem 3
+#### (a)
+```{r}
+library(faraway)
+data(teengamb)
+model = lm(gamble ~ ., data = teengamb)
+summary(model)
+```
+Answer: 
+
+Variables "sex" and "income" are statistically significant.
+
+
+#### (b)
+Answer: 
+```{r}
+help(teengamb)
+```
+Answer: 
+
+According to the introduction of dataset "teengamb", we see that for variable "sex": 0=male and 1=female. And the variable "gamble" represents the expenditure on gambling in pounds per year.
+
+So the coefficient of "sex", which equals to -22.11833, means that when the other covariates are not changed, the average expenditure on gambling in pounds per year for a female is 22.11833 pounds lower than that of a male.
+
+
+#### (c)
+```{r}
+# a male with average status, income and verbal score
+x_new_ave = data.frame(sex=0,status=mean(teengamb$status),
+                       income=mean(teengamb$income),verbal=mean(teengamb$verbal))
+predict(model, x_new_ave, interval = "prediction", level = 0.95)
+
+# a male with maximal values of status, income and verbal score
+x_new_max = data.frame(sex=0,status=max(teengamb$status),
+                       income=max(teengamb$income),verbal=max(teengamb$verbal))
+predict(model, x_new_max, interval = "prediction", level = 0.95)
+```
+Answer: 
+
+The predicted value of gamble for a male with average status, income and verbal score is 28.24252 pounds per year. And the 95% prediction interval is (-18.51536, 75.00039) pounds per year.
+
+The predicted value of gamble for a male with maximal values of status, income and verbal score is 71.30794 pounds per year. And the 95% prediction interval is (17.06588, 125.55) pounds per year.
+
+The prediction interval for a male with maximal values of status, income and verbal score is wider because the maximal data values are farther away from the observation range of data than the average data values.
+
+
+#### (d)
+```{r}
+model2 = lm(gamble~income, data = teengamb)
+anova(model2, model)
+```
+Answer: 
+
+The F-test p-value is 0.01177 < 0.05, so we Reject the null model (only with income as a predictor) at \(\alpha\) = 0.05 significance level comparing with the full model. 
+
+
+### Problem 4
+Shown in the next page.
